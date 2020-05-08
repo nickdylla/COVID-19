@@ -1,0 +1,958 @@
+---
+title: "COVID-19 Data Analysis"
+author: "Nick Dylla"
+date: "5/5/2020"
+output: html_document
+---
+## Load packages
+```{r package-loading}
+library(pacman)
+p_load(readr,
+       tidyverse,
+       curl,
+       ggsci,
+       scico,
+       zoo,
+       RColorBrewer)
+```
+
+## Import COVID-19 Dataset from Github
+### Data is from May 3rd, 2020
+```{r import-covid19-data}
+cv19 <- read_csv("csse_covid_19_data/csse_covid_19_daily_reports/05-03-2020.csv")
+```
+
+## Import Country List (To make filtering more efficient)
+```{r import-country-continent-data}
+ctry <- read.csv(curl("https://raw.githubusercontent.com/dbouquin/IS_608/master/NanosatDB_munging/Countries-Continents.csv"))
+
+ctry <- ctry %>%
+        rename(Country_Region = Country)
+```
+
+## Filter Out Data Only from India, South America, and Africa
+```{r filter-countries-and-wrangle-data}
+cv19_ctry <- merge(cv19, ctry, by.y = "Country_Region", all.x = TRUE)
+
+cv19_ctry_filt <- cv19_ctry %>%
+    filter(Country_Region == "India" |
+               Continent %in% c("Africa", "South America")) %>% 
+        mutate(Percent_Death = Deaths/Confirmed*100,
+               Percent_Recovery = Recovered/Confirmed*100) %>%
+            pivot_longer(
+                cols = c(
+                    "Confirmed",
+                    "Deaths",
+                    "Recovered",
+                    "Active",
+                    "Percent_Recovery",
+                    "Percent_Death"
+                ),
+                names_to = "Metric",
+                values_to = "Count"
+    )
+
+cv19_ctry_filt_0 <- cv19_ctry %>%
+    filter(Country_Region == "India" |
+               Continent %in% c("Africa", "South America") &
+           Confirmed > 0) %>% 
+        mutate(Percent_Death = Deaths/Confirmed*100,
+               Percent_Recovery = Recovered/Confirmed*100) %>%
+            pivot_longer(
+                cols = c(
+                    "Confirmed",
+                    "Deaths",
+                    "Recovered",
+                    "Active",
+                    "Percent_Recovery",
+                    "Percent_Death"
+                ),
+                names_to = "Metric",
+                values_to = "Count"
+    )
+
+cv19_ctry_filt_100 <- cv19_ctry %>%
+    filter(Country_Region == "India" |
+               Continent %in% c("Africa", "South America") &
+           Confirmed > 100) %>% 
+        mutate(Percent_Death = Deaths/Confirmed*100,
+               Percent_Recovery = Recovered/Confirmed*100) %>%
+            pivot_longer(
+                cols = c(
+                    "Confirmed",
+                    "Deaths",
+                    "Recovered",
+                    "Active",
+                    "Percent_Recovery",
+                    "Percent_Death"
+                ),
+                names_to = "Metric",
+                values_to = "Count"
+    )
+
+cv19_ctry_filt_1000 <- cv19_ctry %>%
+    filter(Country_Region == "India" |
+               Continent %in% c("Africa", "South America") &
+           Confirmed > 1000) %>% 
+        mutate(Percent_Death = Deaths/Confirmed*100,
+               Percent_Recovery = Recovered/Confirmed*100) %>%
+            pivot_longer(
+                cols = c(
+                    "Confirmed",
+                    "Deaths",
+                    "Recovered",
+                    "Active",
+                    "Percent_Recovery",
+                    "Percent_Death"
+                ),
+                names_to = "Metric",
+                values_to = "Count"
+    )
+
+cv19_ctry_filt_10000 <- cv19_ctry %>%
+    filter(Country_Region == "India" |
+               Continent %in% c("Africa", "South America") &
+           Confirmed > 10000) %>% 
+        mutate(Percent_Death = Deaths/Confirmed*100,
+               Percent_Recovery = Recovered/Confirmed*100) %>%
+            pivot_longer(
+                cols = c(
+                    "Confirmed",
+                    "Deaths",
+                    "Recovered",
+                    "Active",
+                    "Percent_Recovery",
+                    "Percent_Death"
+                ),
+                names_to = "Metric",
+                values_to = "Count"
+    )
+```
+
+## Plot the raw data (no transformations)
+```{r plot-data-raw}
+
+cv19_ctry_filt_10000 %>% 
+    group_by(Country_Region) %>%
+    filter(Metric %in% c("Confirmed","Deaths","Recovered","Active")) %>%
+    mutate(Metric = fct_relevel(Metric,
+                                "Confirmed", 
+                                "Active", 
+                                "Recovered", 
+                                "Deaths"),
+           Continent = fct_relevel(Continent,
+                                   "South America",
+                                   "Asia",
+                                   "Africa")) %>%
+ggplot(., aes(x = reorder(Country_Region, Count), y = Count, fill = Metric)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text.y = element_text(color = "black", size = 12),
+        axis.text.x = element_text(color = "black", size = 12, angle = 60, vjust = 1, hjust = 1),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 16),
+        legend.text = element_text(color = "black", size = 14)
+    ) +
+    xlab("Country") +
+    ylab("Count") +
+    scale_y_continuous(breaks = seq(0,100000,25000),
+                       labels = scales::comma) +
+    coord_flip() +
+    scale_fill_manual(values = c("#0072B5FF", 
+                                 "#E18727FF",
+                                 "#20854EFF",
+                                 "#BC3C29FF")) +
+    facet_grid(~Continent)
+
+ggsave(
+    "COVID_19_Metrics_10000.png",
+    width = 7,
+    height = 10,
+    units = "in",
+    dpi = 600
+)
+```
+
+## Plot the percent recoveries and deaths data with transformations (to better see values)
+```{r plot-data-recoveries-deaths}
+
+cv19_ctry_filt_10000 %>% 
+    mutate(Country_Region = fct_reorder(Country_Region, Count)) %>%
+    filter(Metric %in% c("Percent_Recovery", "Percent_Death")) %>%
+    ggplot(., aes(x = Country_Region, y = Count, fill = Metric)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 16),
+        legend.text = element_text(color = "black", size = 14)
+    ) +
+    xlab("Country") +
+    ylab("Percent (%)") +
+    scale_y_continuous(limits = c(0,100),
+                       breaks = seq(0, 100, 25),
+                       labels = scales::number_format(accuracy = 1)) +
+    coord_flip() +
+    scale_fill_manual(labels = c("Percent Fatality", "Percent Recovered"),
+                      values = c("#7876B1FF", "#EE4C97FF")) +
+    facet_grid(~Continent)
+
+ggsave(
+    "COVID_19_Percents_10000.png",
+    width = 10,
+    height = 10,
+    units = "in",
+    dpi = 600
+)
+```
+
+## Time series data
+```{r time-series-import}
+## Global
+cv_ts_cfd <- read_csv("csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+
+cv_ts_cfd_long <- cv_ts_cfd %>%
+    pivot_longer(
+        -c(`Province/State`,`Country/Region`,Lat,Long),
+        names_to = "Date",
+        values_to = "Confirmed"
+    )
+
+
+cv_ts_dths <- read_csv("csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+
+cv_ts_dths_long <- cv_ts_dths %>%
+    pivot_longer(
+        -c(`Province/State`,`Country/Region`,Lat,Long),
+        names_to = "Date",
+        values_to = "Deaths"
+    )
+
+cv_ts_rcvd <- read_csv("csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv")
+
+cv_ts_rcvd_long <- cv_ts_rcvd %>%
+    pivot_longer(
+        -c(`Province/State`,`Country/Region`,Lat,Long),
+        names_to = "Date",
+        values_to = "Recovered"
+    )
+
+
+cv_ts_1 <- cbind(cv_ts_cfd_long, cv_ts_dths_long[,6])
+cv_ts_2 <- left_join(cv_ts_1, cv_ts_rcvd_long, by = c("Province/State", "Country/Region","Date")) %>%
+    rename(Country_Region = `Country/Region`,
+           Province_State = `Province/State`,
+           Lat = Lat.x,
+           Long = Long.x) %>%
+    select(-c("Lat.y","Long.y"))
+
+cv_ts_3 <- merge(cv_ts_2, ctry, by.y = "Country_Region", all.x = TRUE)
+cv_ts_3$Date <- as.Date(cv_ts_3$Date, format = "%m/%d/%y")
+
+#############################################################################
+## US
+cv_ts_cfd_us <- read_csv("csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
+
+cv_ts_cfd_us_long <- cv_ts_cfd_us %>% select(-c(
+    UID,
+    iso2,
+    iso3,
+    code3,
+    FIPS,
+    Admin2,
+    Combined_Key,
+    Province_State,
+    Lat,
+    Long_
+)) %>% 
+    group_by(Country_Region) %>% 
+    summarise_all(sum) %>%
+    pivot_longer(-Country_Region,
+        names_to = "Date",
+        values_to = "Confirmed"
+    )
+
+cv_ts_dths_us <- read_csv("csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
+
+cv_ts_dths_us_long <- cv_ts_dths_us %>% select(-c(
+    UID,
+    iso2,
+    iso3,
+    code3,
+    FIPS,
+    Admin2,
+    Combined_Key,
+    Province_State,
+    Lat,
+    Long_
+)) %>% 
+    group_by(Country_Region) %>% 
+    summarise_all(sum) %>%
+    pivot_longer(-Country_Region,
+        names_to = "Date",
+        values_to = "Deaths"
+    ) %>%
+    filter(Date != "Population")
+
+cv_ts_4 <- cbind(cv_ts_cfd_us_long, cv_ts_dths_us_long[,c(3)])
+cv_ts_4$Continent <- "North America"
+cv_ts_4$Recovered <- "NA"
+
+cv_ts_4$Date <- as.Date(cv_ts_4$Date, format = "%m/%d/%y")
+
+cv_ts_5 <- rbind(cv_ts_3[,c("Country_Region","Date","Confirmed","Deaths","Recovered","Continent")], cv_ts_4)
+```
+
+## Plot time series data for India, Africa, and South America
+```{r plot-time-series-india-africa-south-america}
+cv_ts_3 %>% 
+    filter(Country_Region == "India" | Country_Region == "US" |
+           Continent %in% c("Africa", "South America")) %>%
+ggplot(., aes(x = Date, y = Deaths, color = Country_Region)) +
+    geom_point() +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+    ) +
+    xlab("\nDate") +
+    ylab("Deaths\n") +
+    guides(col = guide_legend(ncol = 2)) +
+    facet_wrap(~Continent+Country_Region) +
+    scale_color_scico_d(palette = "batlow", direction = -1, begin = 0.2)
+ggsave(
+    "COVID_19_TimeSeries_Deaths.png",
+    width = 18,
+    height = 12,
+    units = "in",
+    dpi = 600
+)
+```
+
+## Plot time series data for US and Europe
+```{r plot-time-series-us-europe}
+cv_ts_3 %>% 
+    filter(Continent %in% c("North America", "Europe")) %>%
+    group_by(Continent,Country_Region, Date) %>%
+    summarise(Confirmed = sum(Confirmed),
+              Deaths = sum(Deaths),
+              Recovered = sum(Recovered)) %>%
+ggplot(., aes(x = Date, y = Deaths, color = Country_Region)) +
+    geom_point() +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+    ) +
+    xlab("\nDate") +
+    ylab("Deaths\n") +
+    guides(col = guide_legend(ncol = 2)) +
+    facet_wrap(~Continent+Country_Region) +
+    scale_color_scico_d(palette = "hawaii", direction = -1, begin = 0.2)
+ggsave(
+    "COVID_19_TimeSeries_Deaths_NorthAmerica_Europe.png",
+    width = 18,
+    height = 12,
+    units = "in",
+    dpi = 600
+)
+```
+
+## Plot time series data for US, France, Italy, Spain, United Kingdom, Sweden
+```{r plot-time-series-us-selected-europe}
+cv_ts_3 %>% 
+    filter(Country_Region %in% c("US", "France", "Italy", "Spain", "United Kingdom","Sweden")) %>%
+    group_by(Continent,Country_Region, Date) %>%
+    summarise(Confirmed = sum(Confirmed),
+              Deaths = sum(Deaths),
+              Recovered = sum(Recovered)) %>%
+ggplot(., aes(x = Date, y = Deaths, color = Country_Region)) +
+    geom_point() +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+    ) +
+    xlab("\nDate") +
+    ylab("Deaths\n") +
+    guides(col = guide_legend(ncol = 2)) +
+    facet_wrap(~Country_Region, nrow = 1) +
+    scale_color_scico_d(palette = "hawaii", direction = -1, begin = 0.2)
+ggsave(
+    "COVID_19_TimeSeries_Deaths_US_SelectedEurope.png",
+    width = 12,
+    height = 4,
+    units = "in",
+    dpi = 600
+)
+```
+
+## Plot time series data for US, France, Italy, Spain, United Kingdom, Sweden but normalized by population
+```{r plot-time-series}
+pop <- read_csv("csse_covid_19_data/UID_ISO_FIPS_LookUp_Table.csv")
+pop <- pop %>% rename(Country_Region = Country,
+                      Population = Year_2016) %>%
+               mutate(Country_Region = ifelse(Country_Region == "United States", "US", Country_Region))
+cv_ts_3_pop <- merge(cv_ts_3, pop, by = "Country_Region")
+
+cv_ts_3_pop %>% 
+    filter(Country_Region %in% c("US", "France", "Italy", "Spain", "United Kingdom","Sweden")) %>%
+    group_by(Continent,Country_Region, Date) %>%
+    summarise(Confirmed = sum(Confirmed),
+              Deaths = sum(Deaths),
+              Recovered = sum(Recovered),
+              Population = max(Population)) %>%
+    mutate(Population_Million = Population/1000000,
+           Deaths_Per_Million = Deaths/Population_Million) %>%
+ggplot(., aes(x = Date, y = Deaths_Per_Million, color = Country_Region)) +
+    geom_point() +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+    ) +
+    xlab("\nDate") +
+    ylab("Deaths Per Million\n") +
+    guides(col = guide_legend(ncol = 2)) +
+    facet_wrap(~Country_Region, nrow = 1) +
+    scale_color_scico_d(palette = "hawaii", direction = -1, begin = 0.2)
+ggsave(
+    "COVID_19_TimeSeries_Deaths_US_SelectedEurope_Per_Million.png",
+    width = 12,
+    height = 4,
+    units = "in",
+    dpi = 600
+)
+```
+
+## Daily counts instead of cumulative--Deaths
+```{r daily-counts-deaths}
+cv_ts_3_pop_daily <- cv_ts_3_pop %>%
+    group_by(Continent, Country_Region, Date) %>%
+    summarise(Confirmed = sum(Confirmed),
+              Deaths = sum(Deaths),
+              Recovered = sum(Recovered),
+              Population = mean(Population)) %>%
+    arrange(Date) %>%
+    mutate(
+        Confirmed_Daily = Confirmed - lag(Confirmed, default = first(Confirmed)),
+        Deaths_Daily = Deaths - lag(Deaths, default = first(Deaths)),
+        Recovered_Daily = Recovered - lag(Recovered, default = first(Recovered))
+    )
+
+cv_ts_3_pop_daily %>% 
+    filter(Country_Region %in% c("US", "France", "Italy", "Spain", "United Kingdom","Sweden")) %>%
+    mutate(Population_Million = Population/1000000,
+           Deaths_Per_Million = Deaths/Population_Million,
+           Deaths_Daily_Per_Million = Deaths_Daily/Population_Million,
+           Deaths_Daily_3 = rollmean(Deaths_Daily, k = 3, fill = NA),
+           Deaths_Daily_5 = rollmean(Deaths_Daily, k = 5, fill = NA)) %>%
+    select(c(Continent, Country_Region, Date, Population, Date, Deaths_Daily_3, Deaths_Daily_5)) %>%
+    pivot_longer(-c(Continent, Country_Region, Date, Population), 
+                 names_to = "Metric",
+                 values_to = "Value") %>%
+    filter(Metric == "Deaths_Daily_5") %>%
+ggplot(., aes(x = Date, y = Value, color = Country_Region)) +
+    geom_line(size = 1.05) +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+    ) +
+    xlab("\nDate") +
+    ylab("New Deaths\n") +
+    guides(col = guide_legend(ncol = 2)) +
+    facet_wrap(~Country_Region, nrow = 1) +
+    scale_color_scico_d(palette = "hawaii", direction = -1, begin = 0.2)
+ggsave(
+    "COVID_19_Moving_Average_Deaths.png",
+    width = 12,
+    height = 4,
+    units = "in",
+    dpi = 600
+)
+```
+
+## Daily counts instead of cumulative--Confirmed Cases
+```{r daily-counts-confirmed}
+cv_ts_3_pop_daily %>% 
+    filter(Country_Region %in% c("US", "France", "Italy", "Spain", "United Kingdom","Sweden")) %>%
+    mutate(Population_Million = Population/1000000,
+           Deaths_Per_Million = Deaths/Population_Million,
+           Deaths_Daily_Per_Million = Deaths_Daily/Population_Million,
+           Deaths_Daily_3 = rollmean(Deaths_Daily, k = 3, fill = NA),
+           Deaths_Daily_5 = rollmean(Deaths_Daily, k = 5, fill = NA),
+           Confirmed_Daily_5 = rollmean(Confirmed_Daily, k = 5, fill = NA)) %>%
+    select(c(Continent, Country_Region, Date, Population, Date, Deaths_Daily_3, Deaths_Daily_5, Confirmed_Daily_5)) %>%
+    pivot_longer(-c(Continent, Country_Region, Date, Population), 
+                 names_to = "Metric",
+                 values_to = "Value") %>%
+    filter(Metric == "Confirmed_Daily_5") %>%
+ggplot(., aes(x = Date, y = Value, color = Country_Region)) +
+    geom_line(size = 1.05) +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+    ) +
+    xlab("\nDate") +
+    ylab("Confirmed New Cases\n") +
+    guides(col = guide_legend(ncol = 2)) +
+    facet_wrap(~Country_Region, nrow = 1) +
+    scale_color_scico_d(palette = "hawaii", direction = -1, begin = 0.2)
+ggsave(
+    "COVID_19_Moving_Average_Confirmed.png",
+    width = 12,
+    height = 4,
+    units = "in",
+    dpi = 600
+)
+```
+
+## Number of tests
+```{r new-tests}
+# Data from https://github.com/owid/covid-19-data/tree/master/public/data/
+complete_data <- read_csv("csse_covid_19_data/owid-covid-data.csv")
+complete_data$Date <- as.Date(complete_data$Date, format = "%m/%d/%Y")
+
+complete_data %>% select(-Test_Units) %>%
+    pivot_longer(-c(Country_Region,Date),
+                 names_to = "Metric",
+                 values_to = "Value") %>%
+    filter(Metric == "Tests_Daily",
+           Country_Region %in% c("United States", "France", "Italy", "Spain", "United Kingdom","Sweden")) %>% na.omit() %>%
+ggplot(., aes(x = Date, y = Value, color = Country_Region)) +
+    geom_line(size = 1.05) +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+    ) +
+    xlab("\nDate") +
+    ylab("Daily Tests\n") +
+    # guides(col = guide_legend(ncol = 2)) +
+    # facet_wrap(~Country_Region, nrow = 1) +
+    scale_y_continuous(labels = scales::comma) +
+    scale_color_scico_d(palette = "hawaii", direction = -1, begin = 0.2)
+ggsave(
+    "COVID_19_Moving_Average_Tests.png",
+    width = 12,
+    height = 4,
+    units = "in",
+    dpi = 600
+)
+```
+
+## Number of total tests
+```{r total-tests}
+# Data from https://github.com/owid/covid-19-data/tree/master/public/data/
+complete_data <- read_csv("csse_covid_19_data/owid-covid-data.csv")
+complete_data$Date <- as.Date(complete_data$Date, format = "%m/%d/%Y")
+
+complete_data %>% select(-Test_Units) %>%
+    pivot_longer(-c(Country_Region,Date),
+                 names_to = "Metric",
+                 values_to = "Value") %>%
+    filter(Metric == "Tests",
+           Country_Region %in% c("United States", "France", "Italy", "Spain", "United Kingdom","Sweden", "South Korea", "China")) %>% na.omit() %>%
+ggplot(., aes(x = Date, y = Value, color = Country_Region)) +
+    geom_line(size = 1.05) +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+    ) +
+    xlab("\nDate") +
+    ylab("Total Tests\n") +
+    # guides(col = guide_legend(ncol = 2)) +
+    # facet_wrap(~Country_Region, nrow = 1) +
+    scale_y_continuous(labels = scales::comma) +
+    scale_color_scico_d(palette = "hawaii", direction = -1, begin = 0.2)
+ggsave(
+    "COVID_19_Moving_Average_TotalTests.png",
+    width = 12,
+    height = 4,
+    units = "in",
+    dpi = 600
+)
+```
+
+## United States Confirmed Cases
+```{r map-of-confirmed-cases}
+
+cv_ts_cfd_us_map <- cv_ts_cfd_us %>% select(-c(
+    UID,
+    iso2,
+    iso3,
+    code3,
+    FIPS,
+    Admin2,
+    Combined_Key,
+    Lat,
+    Long_
+)) %>% 
+    group_by(Country_Region, Province_State) %>% 
+    summarise_all(sum) %>%
+    pivot_longer(-c(Country_Region,Province_State),
+        names_to = "Date",
+        values_to = "Confirmed"
+    ) %>%
+    group_by(Country_Region, Province_State) %>%
+    summarise(Confirmed = max(Confirmed))
+
+cv_ts_cfd_us_map$Province_State <- tolower(cv_ts_cfd_us_map$Province_State)
+cv_ts_cfd_us_map <- cv_ts_cfd_us_map %>%
+    mutate(Confirmed_Binned = 
+               case_when(Confirmed <=10000 ~ 0,
+                         Confirmed > 10000 & Confirmed <= 25000 ~ 10000,
+                         Confirmed > 25000 & Confirmed <= 50000 ~ 25000,
+                         Confirmed > 50000 & Confirmed <= 100000 ~ 50000,
+                         Confirmed > 100000 & Confirmed <= 150000 ~ 100000,
+                         Confirmed > 150000 & Confirmed <= 200000 ~ 150000,
+                         Confirmed > 200000 & Confirmed <= 250000 ~ 200000,
+                         Confirmed > 250000 & Confirmed <= 300000 ~ 250000,
+                         Confirmed > 300000 & Confirmed <= 350000 ~ 300000,
+                         Confirmed > 350000 ~ 350000))
+
+# Get map data
+require(maps) 
+usa_map <- map_data("state")
+
+ggplot(cv_ts_cfd_us_map, aes(map_id = Province_State)) + 
+    geom_map(aes(fill = Confirmed_Binned), map = usa_map, col = "black") +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+        plot.title = element_text(hjust = 0.5, size = 14, color = "black"),
+        legend.key.size = unit(1.5,"line")
+    ) +
+    xlab("\nLongitude") +
+    ylab("Latitude\n") +
+    ggtitle("Number of Confirmed Cases in the United States") +
+    scale_fill_gradientn(guide = 'legend', 
+                         colours = brewer.pal(n = 11, name = 'Spectral'),
+                         breaks = c(0,25000, seq(50000,350000,50000)),
+                         values = scales::rescale(c(0,10000,25000,50000,100000, 150000,200000,250000,300000,350000)),
+                         labels = scales::comma) +
+    labs(fill = "Confirmed Cases\n(Greater Than)") +
+    expand_limits(x = usa_map$long, y = usa_map$lat)
+ggsave(
+    "COVID_19_Map_ConfirmedCases_Binned.png",
+    width = 14,
+    height = 8,
+    units = "in",
+    dpi = 600
+)
+```
+
+## United States Deaths
+```{r map-of-deaths}
+
+cv_ts_dths_us_map <- cv_ts_dths_us %>% select(-c(
+    UID,
+    iso2,
+    iso3,
+    code3,
+    FIPS,
+    Admin2,
+    Combined_Key,
+    Lat,
+    Long_
+)) %>% 
+    group_by(Country_Region, Province_State) %>% 
+    summarise_all(sum) %>%
+    pivot_longer(-c(Country_Region,Province_State, Population),
+        names_to = "Date",
+        values_to = "Deaths"
+    ) %>%
+    group_by(Country_Region, Province_State) %>%
+    summarise(Population = max(Population),
+              Deaths = max(Deaths))
+
+cv_ts_dths_us_map$Province_State <- tolower(cv_ts_dths_us_map$Province_State)
+cv_ts_dths_us_map <- cv_ts_dths_us_map %>%
+    mutate(Deaths_Binned = 
+               case_when(Deaths <=100 ~ 0,
+                         Deaths > 100 & Deaths <= 250 ~ 100,
+                         Deaths > 250 & Deaths <= 500 ~ 250,
+                         Deaths > 500 & Deaths <= 1000 ~ 500,
+                         Deaths > 1000 & Deaths <= 2500 ~ 1000,
+                         Deaths > 2500 & Deaths <= 5000 ~ 2500,
+                         Deaths > 5000 & Deaths <= 10000 ~ 5000,
+                         Deaths > 10000 & Deaths <= 15000 ~ 10000,
+                         Deaths > 15000 & Deaths <= 20000 ~ 15000,
+                         Deaths > 20000 & Deaths <= 25000 ~ 20000,
+                         Deaths > 250000 ~ 250000))
+
+ggplot(cv_ts_dths_us_map, aes(map_id = Province_State)) + 
+    geom_map(aes(fill = Deaths_Binned), map = usa_map, col = "black") +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+        plot.title = element_text(hjust = 0.5, size = 14, color = "black"),
+        legend.key.size = unit(1.5,"line")
+    ) +
+    xlab("\nLongitude") +
+    ylab("Latitude\n") +
+    ggtitle("Number of Total Deaths in the United States") +
+    scale_fill_gradientn(guide = 'legend', 
+                         colours = brewer.pal(n = 12, name = 'Spectral'),
+                         breaks = c(0,100,250,500,1000,2500, 5000,10000,15000,20000,25000),
+                         limits = c(0,25000),
+                         labels = scales::comma,
+                     values = scales::rescale(c(0,100,250,500,1000,2500, 5000,10000,15000,20000,25000))) +
+    labs(fill = "Total Deaths\n(Greater Than)") +
+    expand_limits(x = usa_map$long, y = usa_map$lat)
+ggsave(
+    "COVID_19_Map_TotalDeaths_Binned.png",
+    width = 14,
+    height = 8,
+    units = "in",
+    dpi = 600
+)
+```
+
+## United States Deaths Per Million
+```{r map-of-deaths-per-million}
+
+cv_ts_dths_us_map %>% 
+    mutate(Population_Per_Million = Population/1000000,
+           Deaths_Per_Million = Deaths/Population_Per_Million,
+           Deaths_Per_Million_Binned = case_when(
+               Deaths_Per_Million <= 25 ~ 0,
+               Deaths_Per_Million > 25 &
+                   Deaths_Per_Million <= 50 ~ 25,
+               Deaths_Per_Million > 50 &
+                   Deaths_Per_Million <= 75 ~ 50,
+               Deaths_Per_Million > 75 &
+                   Deaths_Per_Million <= 100 ~ 75,
+               Deaths_Per_Million > 100 &
+                   Deaths_Per_Million <= 250 ~ 100,
+               Deaths_Per_Million > 250 &
+                   Deaths_Per_Million <= 500 ~ 250,
+               Deaths_Per_Million > 500 &
+                   Deaths_Per_Million <= 1000 ~ 500,
+               Deaths_Per_Million > 1000 ~ 1000
+           )) %>%
+ggplot(., aes(map_id = Province_State)) + 
+    geom_map(aes(fill = Deaths_Per_Million_Binned), map = usa_map, col = "black") +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+        plot.title = element_text(hjust = 0.5, size = 14, color = "black")
+    ) +
+    xlab("\nLongitude") +
+    ylab("Latitude\n") +
+    ggtitle("Number of Deaths (Per Million Population) in the United States") +
+    scale_fill_gradientn(guide = 'legend', 
+                         colours = brewer.pal(n = 11, name = 'Spectral'),
+                         breaks = c(0,25,50,75,100,250,500,1000),
+                         limits = c(0,1100),
+                         labels = scales::comma,
+                         values = scales::rescale(c(0,25,50,75,100,250,500,1000))) +
+    labs(fill = "Deaths Per Million\n (Greater Than)") +
+    expand_limits(x = usa_map$long, y = usa_map$lat)
+ggsave(
+    "COVID_19_Map_DeathsPerMillion_Binned.png",
+    width = 14,
+    height = 8,
+    units = "in",
+    dpi = 600
+)
+```
+
+## Illinois and West Virginia Deaths over time
+```{r-il-wv-deaths}
+cv_ts_dths_us_long2 <- cv_ts_dths_us %>% select(-c(
+    UID,
+    iso2,
+    iso3,
+    code3,
+    FIPS,
+    Admin2,
+    Combined_Key,
+    Lat,
+    Long_
+)) %>% 
+    group_by(Country_Region, Province_State) %>% 
+    pivot_longer(-c(Country_Region, Province_State, Population),
+        names_to = "Date",
+        values_to = "Deaths"
+    ) %>%
+    filter(Date != "Population") %>%
+    group_by(Country_Region, Province_State, Date) %>%
+    summarise(Population = sum(Population),
+              Deaths = sum(Deaths))
+
+cv_ts_dths_us_long2$Date <- as.Date(cv_ts_dths_us_long2$Date, format = "%m/%d/%y")
+
+cv_ts_dths_us_long2 %>% 
+    filter(Province_State %in% c("Illinois","West Virginia")) %>%
+    group_by(Province_State, Date) %>%
+    summarise(Deaths = sum(Deaths),
+              Population = max(Population)) %>%
+    mutate(Population_Million = Population/1000000,
+           Deaths_Per_Million = Deaths/Population_Million,
+           Deaths_Daily = Deaths - lag(Deaths, default = first(Deaths)),
+           Deaths_Daily_5 = rollmean(Deaths_Daily, k = 5, fill = NA),
+           Deaths_Daily_Per_Million = Deaths_Daily_5/Population_Million) %>%
+    select(c(Province_State, Date, Population, Date, Deaths_Daily_5, Deaths_Daily_Per_Million)) %>%
+    pivot_longer(-c(Province_State, Date, Population), 
+                 names_to = "Metric",
+                 values_to = "Value") %>%
+    filter(Metric == "Deaths_Daily_Per_Million") %>%
+ggplot(., aes(x = Date, y = Value, color = Province_State)) +
+    geom_point() +
+    geom_line() +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+    ) +
+    xlab("\nDate") +
+    ylab("New Deaths Per Million\n") +
+    labs(color = "State") +
+    scale_color_aaas()
+ggsave(
+    "COVID_19_Moving_Average_Deaths_IL_WV_Per_Million.png",
+    width = 8,
+    height = 6,
+    units = "in",
+    dpi = 600
+)
+
+```
+
+## Illinois and West Virginia Confirmed Cases over time
+```{r il-wv-confirmed-cases}
+cv_ts_cfd_us_long2 <- cv_ts_cfd_us %>% select(-c(
+    UID,
+    iso2,
+    iso3,
+    code3,
+    FIPS,
+    Admin2,
+    Combined_Key,
+    Lat,
+    Long_
+)) %>% 
+    group_by(Country_Region, Province_State) %>%
+    pivot_longer(-c(Country_Region, Province_State),
+        names_to = "Date",
+        values_to = "Confirmed"
+    )
+cv_ts_cfd_us_long2$Date <- as.Date(cv_ts_cfd_us_long2$Date, format = "%m/%d/%y")
+
+cv_ts_cfd_us_long2 <- left_join(cv_ts_cfd_us_long2, cv_ts_dths_us_long2[,1:4], by = c("Province_State", "Country_Region","Date"))
+
+cv_ts_cfd_us_long3 <- cv_ts_cfd_us_long2 %>% 
+    filter(Province_State %in% c("Illinois","West Virginia")) %>%
+    group_by(Province_State, Date) %>%
+    summarise(Confirmed = sum(Confirmed),
+              Population = max(Population)) %>%
+    mutate(Population_Million = Population/1000000,
+           Confirmed_Per_Million = Confirmed/Population_Million,
+           Confirmed_Daily = Confirmed - lag(Confirmed, default = first(Confirmed)),
+           Confirmed_Daily_5 = rollmean(Confirmed_Daily, k = 5, fill = NA),
+           Confirmed_Daily_Per_Million = Confirmed_Daily_5/Population_Million) %>%
+    select(c(Province_State, Date, Population, Date, Confirmed, Confirmed_Daily, Confirmed_Daily_5, Confirmed_Daily_Per_Million)) %>%
+    pivot_longer(-c(Province_State, Date, Population), 
+                 names_to = "Metric",
+                 values_to = "Value")
+
+ggplot(cv_ts_cfd_us_long3, aes(x = Date, y = Value, color = Province_State)) +
+    geom_point() +
+    geom_line() +
+    theme_bw() +
+    theme(
+        axis.title = element_text(color = "black", size = 14),
+        axis.text = element_text(color = "black", size = 12),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        strip.text = element_text(color = "black", size = 12),
+        legend.title = element_text(color = "black", size = 14, hjust = 0.25),
+        legend.text = element_text(color = "black", size = 12),
+    ) +
+    xlab("\nDate") +
+    ylab("New Confirmed Cases\n") +
+    labs(color = "State") +
+    scale_color_aaas()
+ggsave(
+    "COVID_19_Moving_Average_Confirmed_IL_WV.png",
+    width = 8,
+    height = 6,
+    units = "in",
+    dpi = 600
+)
+
+```
+
+
